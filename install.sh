@@ -96,6 +96,7 @@ if [ "$FIRMWARE" = "UEFI" ]; then
     arch-chroot "$MOUNTPOINT" bootctl install
 else
     log "Installing GRUB for legacy BIOS..."
+    arch-chroot "$MOUNTPOINT" pacman -Sy grub --noconfirm
     arch-chroot "$MOUNTPOINT" grub-install --target=i386-pc "$DISK"
     arch-chroot "$MOUNTPOINT" grub-mkconfig -o /boot/grub/grub.cfg
 fi
