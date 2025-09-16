@@ -30,5 +30,5 @@ package() {
         "${pkgdir}/usr/share/doc/antisos-installer/README.md"
 
     install -Dm644 "install.sh" \
-        "${pkgdir}/usr/share/doc/antisos-installer/install.sh"
+        "${pkgdir}/usr/share/antisos-installer/install.sh"
 }
