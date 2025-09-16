@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+from textual.app import App, ComposeResult
+from textual.containers import Vertical
+from textual.widgets import Header, Footer, Button
+
+from pages.welcome import WelcomePage
+from pages.select_disk import SelectDiskPage
+from pages.summary import SummaryPage
+import installer_core
+
+class InstallerApp(App):
+    CSS_PATH = "css/installer.tcss"
+
+    def __init__(self):
+        super().__init__()
+        self.current = None
+        self.selected_disk = None
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        self.main = Vertical(id="main")
+        yield self.main
+        yield Footer()
+
+    def on_mount(self) -> None:
+        self.show_welcome()
+
+    def clear_main(self):
+        if self.current:
+            self.current.remove()
+
+    def show_welcome(self):
+        self.clear_main()
+        self.current = WelcomePage()
+        self.main.mount(self.current)
+
+    def show_select_disk(self):
+        self.clear_main()
+        self.current = SelectDiskPage()
+        self.main.mount(self.current)
+
+    def show_summary(self, disk):
+        self.clear_main()
+        self.selected_disk = disk
+        self.current = SummaryPage(disk)
+        self.main.mount(self.current)
+
+    def show_install(self):
+        self.clear_main()
+        installer_core.install_antisos(self.selected_disk)
+        self.exit()
+
+    def on_button_pressed(self, event: Button.Pressed):
+        btn = event.button.id
+        if btn == "welcome-next":
+            self.show_select_disk()
+        elif btn == "disk-back":
+            self.show_welcome()
+        elif btn == "disk-advanced":
+            SelectDiskPage.launch_gparted()
+        elif btn == "disk-next":
+            disk_radio = self.query_one("#disk-radio")
+            selected = None
+            for rb in disk_radio.query("RadioButton"):
+                if rb.value:
+                    selected = rb.label.plain
+                    break
+            if selected:
+                self.show_summary(selected)
+        elif btn == "summary-back":
+            self.show_select_disk()
+        elif btn == "summary-install":
+            self.show_install()
+
+if __name__ == "__main__":
+    InstallerApp().run()

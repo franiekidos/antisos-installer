@@ -1,0 +1,33 @@
+/* The top level dialog (a Container) */
+#dialog {
+    height: 100%;
+    margin: 4 8;
+    background: $panel;
+    color: $text;
+    border: tall $background;
+    padding: 1 2;
+}
+
+/* Matches the question text */
+.question {
+    text-style: bold;
+    height: 100%;
+    content-align: center middle;
+}
+
+Button {
+    border: round white;  /* Rounded corners */
+    padding: 0 2;
+    background: darkblue;
+    color: white;
+}
+
+Button.-selected {
+    background: blue;
+    color: white;
+}
+
+Button:hover {
+    background: blue;
+    color: yellow;
+}
