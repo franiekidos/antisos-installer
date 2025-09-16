@@ -48,25 +48,28 @@ class InstallPage(Vertical):
             await self.log(f"[ERROR] {e}")
             raise
 
-    async def run_install(self):
+         async def run_install(self):
         """Run the full installation process for AntisOS."""
         try:
             await self.log("Starting AntisOS installation...")
 
+            # 🔑 Extract the real device path (strip anything in parentheses)
+            device_path = self.disk.split()[0]
+            await self.log(f"Using device: {device_path}")
+
             # 1. Create a single root partition on the disk
-            await self.log(f"Creating a single ext4 partition on {self.disk}...")
-            # Use parted to create GPT and a root partition
-            await self.run_command(f"parted {self.disk} mklabel gpt")
-            await self.run_command(f"parted -a optimal {self.disk} mkpart primary ext4 1MiB 100%")
-            root_partition = f"{self.disk}1"
+            await self.log(f"Creating a single ext4 partition on {device_path}...")
+            await self.run_command(f"parted -s {device_path} mklabel gpt")
+            await self.run_command(f"parted -s -a optimal {device_path} mkpart primary ext4 1MiB 100%")
+            root_partition = f"{device_path}1"
 
             # 2. Format the partition
             await self.log(f"Formatting partition {root_partition} as ext4...")
-            await self.run_command(f"mkfs.ext4 {root_partition}")
+            await self.run_command(f"mkfs.ext4 -F {root_partition}")
 
             # 3. Mount the partition
-            await self.log(f"Mounting {root_partition} to /mnt...")
             mount_point = "/mnt"
+            await self.log(f"Mounting {root_partition} to {mount_point}...")
             await self.run_command(f"mount {root_partition} {mount_point}")
 
             # 4. Install base Arch Linux system
@@ -78,7 +81,7 @@ class InstallPage(Vertical):
             await self.run_command(f"genfstab -U {mount_point} >> {mount_point}/etc/fstab")
 
             # 6. Configure system in chroot
-            await self.log("Entering chroot for system configuration...")
+            await self.log("Configuring system inside chroot...")
             chroot_cmds = [
                 # Timezone
                 f"arch-chroot {mount_point} ln -sf /usr/share/zoneinfo/US/Pacific /etc/localtime",
@@ -86,9 +89,9 @@ class InstallPage(Vertical):
                 # Locale
                 f"arch-chroot {mount_point} sed -i 's/#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen",
                 f"arch-chroot {mount_point} locale-gen",
-                f"arch-chroot {mount_point} echo 'LANG=en_US.UTF-8' > {mount_point}/etc/locale.conf",
+                f"arch-chroot {mount_point} bash -c \"echo 'LANG=en_US.UTF-8' > /etc/locale.conf\"",
                 # Hostname
-                f"arch-chroot {mount_point} echo 'antisos' > {mount_point}/etc/hostname",
+                f"arch-chroot {mount_point} bash -c \"echo 'antisos' > /etc/hostname\"",
             ]
             for cmd in chroot_cmds:
                 await self.run_command(cmd)
@@ -97,7 +100,7 @@ class InstallPage(Vertical):
             await self.log("Detecting firmware and installing bootloader...")
             is_uefi = False
             try:
-                with open("/sys/firmware/efi/efivars"):
+                with open("/sys/firmware/efi/efivars"):  # exists only on UEFI systems
                     is_uefi = True
             except FileNotFoundError:
                 is_uefi = False
@@ -106,15 +109,20 @@ class InstallPage(Vertical):
                 await self.log("UEFI detected. Installing systemd-boot...")
                 await self.run_command(f"arch-chroot {mount_point} bootctl install")
             else:
-                await self.log("Legacy BIOS detected. Installing GRUB Legacy...")
-                await self.run_command(f"arch-chroot {mount_point} grub-install --target=i386-pc {self.disk}")
+                await self.log("Legacy BIOS detected. Installing GRUB...")
+                await self.run_command(f"arch-chroot {mount_point} grub-install --target=i386-pc {device_path}")
                 await self.run_command(f"arch-chroot {mount_point} grub-mkconfig -o /boot/grub/grub.cfg")
 
-            # 8. Final messages
-            await self.log("Setting up initial user and finishing configuration...")
-            await self.run_command(f"arch-chroot {mount_point} useradd -m -G wheel liveuser")
-            await self.run_command(f"arch-chroot {mount_point} passwd liveuser")
+            # 8. Setup root autologin on tty1
+            await self.log("Configuring root autologin on tty1...")
+            service_override = f"{mount_point}/etc/systemd/system/getty@tty1.service.d"
+            await self.run_command(f"mkdir -p {service_override}")
+            override_conf = f"{service_override}/override.conf"
+            await self.run_command(
+                f"bash -c \"echo -e '[Service]\\nExecStart=\\nExecStart=-/sbin/agetty --autologin root --noclear %I $TERM' > {override_conf}\""
+            )
 
-            await self.log("Installation complete! You can reboot into your new AntisOS system.")
+            # 9. Done
+            await self.log("✅ Installation complete! System is set to autologin as root on tty1.")
         except Exception as e:
-            await self.log(f"Installation failed: {e}")
+            await self.log(f"❌ Installation failed: {e}")
