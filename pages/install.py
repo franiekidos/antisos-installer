@@ -49,7 +49,7 @@ class InstallPage(Vertical):
             raise
 
     async def run_install(self):
-    """Run the full installation process for AntisOS."""
+    # """Run the full installation process for AntisOS."""
     try:
         await self.log("Starting AntisOS installation...")
 
