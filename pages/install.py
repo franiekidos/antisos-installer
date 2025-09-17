@@ -1,50 +1,60 @@
+#!/usr/bin/env python3
 import asyncio
-from textual.widgets import TextLog, Button, Static
-from textual.containers import Vertical, Horizontal
 from textual.app import ComposeResult
+from textual.containers import Vertical, Horizontal, ScrollView
+from textual.widgets import Static, Button
+
+class LogView(ScrollView):
+    """Scrollable log widget using Static inside ScrollView."""
+    def __init__(self):
+        super().__init__()
+        self.log_text = ""
+        self.log_widget = Static("", id="log-text")
+        self.mount(self.log_widget)
+
+    async def write_line(self, line: str):
+        self.log_text += line + "\n"
+        self.log_widget.update(self.log_text)
+        self.scroll_end(animate=False)
+        await asyncio.sleep(0)  # Yield so UI refreshes
 
 class InstallPage(Vertical):
-    def __init__(self, disk: str):
+    """Runs the installation script at /usr/share/antisos-installer/install.sh and displays logs."""
+
+    def __init__(self):
         super().__init__()
-        self.disk = disk.split()[0].split("(")[0].strip()
-        self.log_widget = TextLog(id="install-log", highlight=True, wrap=True)
+        self.logview = LogView()
 
     def compose(self) -> ComposeResult:
-        yield Static(f"Installing AntisOS to {self.disk}", id="install-title")
-        yield self.log_widget
+        yield Static("Installing AntisOS...", id="install-title")
+        yield self.logview
         with Horizontal():
             yield Button("Quit", id="install-quit")
 
     async def log(self, message: str):
-        self.log_widget.write(message)
-        await asyncio.sleep(0.02)
+        await self.logview.write_line(message)
 
-    async def run_install_script(self):
+    async def run_script(self):
+        """Run the external shell script and stream output to the log."""
         script_path = "/usr/share/antisos-installer/install.sh"
+        await self.log(f"Starting installation using {script_path}...")
 
-        await self.log("Starting AntisOS installation...")
-        await self.log(f"Target disk: {self.disk}")
+        process = await asyncio.create_subprocess_shell(
+            script_path,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
 
-        try:
-            process = await asyncio.create_subprocess_exec(
-                script_path, self.disk,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
-            )
+        assert process.stdout is not None
+        async for line in process.stdout:
+            await self.log(line.decode().rstrip())
 
-            assert process.stdout is not None
-            async for line in process.stdout:
-                await self.log(line.decode().rstrip())
-
-            await process.wait()
-            if process.returncode == 0:
-                await self.log("✅ Installation completed successfully!")
-            else:
-                await self.log(f"❌ Installer exited with code {process.returncode}")
-        except FileNotFoundError:
-            await self.log(f"[ERROR] {script_path} not found")
-        except PermissionError:
-            await self.log(f"[ERROR] Permission denied for {script_path}")
+        await process.wait()
+        if process.returncode == 0:
+            await self.log("Installation finished successfully!")
+        else:
+            await self.log(f"[ERROR] Installation failed with code {process.returncode}")
 
     async def on_mount(self) -> None:
-        asyncio.create_task(self.run_install_script())
+        """Automatically start the script when the page is mounted."""
+        await self.run_script()
