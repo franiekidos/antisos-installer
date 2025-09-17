@@ -1,17 +1,13 @@
 import asyncio
-from textual.widgets import Static, Button
+from textual.widgets import TextLog, Button, Static
 from textual.containers import Vertical, Horizontal
 from textual.app import ComposeResult
 
 class InstallPage(Vertical):
-    """Installation page that runs the real AntisOS shell installer."""
-
     def __init__(self, disk: str):
         super().__init__()
-        # Sanitize disk input -> only keep the actual device path (/dev/xxx)
         self.disk = disk.split()[0].split("(")[0].strip()
-        self.log_text = ""
-        self.log_widget = Static("", id="install-log")
+        self.log_widget = TextLog(id="install-log", highlight=True, wrap=True)
 
     def compose(self) -> ComposeResult:
         yield Static(f"Installing AntisOS to {self.disk}", id="install-title")
@@ -20,24 +16,20 @@ class InstallPage(Vertical):
             yield Button("Quit", id="install-quit")
 
     async def log(self, message: str):
-        """Append a message to the log widget."""
-        self.log_text += f"\n{message}"
-        self.log_widget.update(self.log_text)
-        await asyncio.sleep(0.05)
+        self.log_widget.write(message)
+        await asyncio.sleep(0.02)
 
     async def run_install_script(self):
-        """Run the real shell installer at /usr/share/antisos-installer/install.sh."""
         script_path = "/usr/share/antisos-installer/install.sh"
 
         await self.log("Starting AntisOS installation...")
         await self.log(f"Target disk: {self.disk}")
-        await self.log(f"Running {script_path} ...")
 
         try:
             process = await asyncio.create_subprocess_exec(
                 script_path, self.disk,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT
+                stderr=asyncio.subprocess.STDOUT,
             )
 
             assert process.stdout is not None
@@ -50,10 +42,9 @@ class InstallPage(Vertical):
             else:
                 await self.log(f"❌ Installer exited with code {process.returncode}")
         except FileNotFoundError:
-            await self.log(f"[ERROR] Installer script not found at {script_path}")
+            await self.log(f"[ERROR] {script_path} not found")
         except PermissionError:
-            await self.log(f"[ERROR] No permission to execute {script_path}. Try chmod +x.")
+            await self.log(f"[ERROR] Permission denied for {script_path}")
 
     async def on_mount(self) -> None:
-        """Start installer automatically when the page is mounted."""
         asyncio.create_task(self.run_install_script())
