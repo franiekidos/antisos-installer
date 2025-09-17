@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 import asyncio
 from textual.app import ComposeResult
-from textual.containers import Vertical, Horizontal, ScrollView
+from textual.containers import Vertical, Horizontal, scroll_view
 from textual.widgets import Static, Button
 
-class LogView(ScrollView):
-    """Scrollable log widget using Static inside ScrollView."""
+class LogView(scroll_view):
+    """Scrollable log widget using Static inside scroll_view."""
     def __init__(self):
         super().__init__()
         self.log_text = ""
