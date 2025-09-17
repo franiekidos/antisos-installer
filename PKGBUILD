@@ -31,4 +31,5 @@ package() {
 
     install -Dm644 "install.sh" \
         "${pkgdir}/usr/share/antisos-installer/install.sh"
+    chmod +x ${pkgdir}/usr/share/antisos-installer/install.sh
 }

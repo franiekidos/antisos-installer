@@ -28,7 +28,7 @@ class InstallPage(Vertical):
         """Run the external shell installer script and stream its output."""
         script_path = "/usr/share/antisos-installer/install.sh"
         cmd = f"bash {script_path} {self.disk}"
-        await self.log(f"Running: {cmd}")
+        await self.log(f"Currently Running: {cmd}")
 
         process = await asyncio.create_subprocess_shell(
             cmd,
