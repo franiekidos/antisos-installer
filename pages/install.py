@@ -38,7 +38,7 @@ class InstallPage(Vertical):
         await self.log("Launching installer script...")
 
         # Ensure the script is executable
-        script_path = "/usr/share/antisos-installer/antisos-installer.sh"
+        script_path = "/usr/share/antisos-installer/install.sh"
         try:
             process = await asyncio.create_subprocess_exec(
                 script_path, self.disk,
