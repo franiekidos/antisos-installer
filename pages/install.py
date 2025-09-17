@@ -7,32 +7,30 @@ from textual.widgets import Static, Button
 class InstallPage(Vertical):
     """Runs /usr/share/antisos-installer/install.sh with auto-scrolling log."""
 
-    def __init__(self):
+    def __init__(self, disk: str):
         super().__init__()
+        self.disk = disk  # store the target disk
         self.log_text = ""
-        self.log_widget = Static("", id="install-log", expand=True)  # expand fills container
+        self.log_widget = Static("", id="install-log", expand=True)
 
     def compose(self) -> ComposeResult:
-        yield Static("Installing AntisOS...", id="install-title")
+        yield Static(f"Installing AntisOS to {self.disk}", id="install-title")
         yield self.log_widget
         with Horizontal():
             yield Button("Quit", id="install-quit")
 
     async def log(self, message: str):
-        """Append a message and auto-scroll to the bottom."""
         self.log_text += message + "\n"
         self.log_widget.update(self.log_text)
-        # Auto-scroll: set scroll to max height
         self.log_widget.scroll_end(animate=False)
-        await asyncio.sleep(0)  # allow UI to refresh
+        await asyncio.sleep(0)
 
     async def run_script(self):
-        """Run the installation script and stream output line by line."""
         script_path = "/usr/share/antisos-installer/install.sh"
-        await self.log(f"Running {script_path}...\n")
+        await self.log(f"Running {script_path} on {self.disk}...\n")
 
         process = await asyncio.create_subprocess_shell(
-            script_path,
+            f"{script_path} {self.disk}",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
         )
@@ -48,5 +46,4 @@ class InstallPage(Vertical):
             await self.log(f"\n[ERROR] Installation failed with code {process.returncode}")
 
     async def on_mount(self) -> None:
-        """Start installation immediately when page is mounted."""
         await self.run_script()
