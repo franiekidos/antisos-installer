@@ -1,49 +1,46 @@
 import asyncio
-from textual.widgets import Static
-from textual.containers import Vertical, Horizontal
-from textual.widgets import Button
 from textual.app import ComposeResult
+from textual.containers import Vertical, Horizontal
+from textual.widgets import Static, Button
 
 class InstallPage(Vertical):
-    """Installation page that runs the external AntisOS install script."""
-
-    def __init__(self, disk_label: str):
+    def __init__(self, script_path: str = "/usr/share/antisos-installer/install.sh", display_lines: int = 20):
         super().__init__()
-        self.disk = disk_label.split()[0]  # Only use the raw device path
-        self.log_text = ""
+        self.script_path = script_path
+        self.display_lines = display_lines
+        self.log_lines = []
         self.log_widget = Static("", id="install-log")
 
     def compose(self) -> ComposeResult:
-        yield Static(f"Installing AntisOS to {self.disk}", id="install-title")
+        yield Static(f"Running installer: {self.script_path}", id="install-title")
         yield self.log_widget
         with Horizontal():
             yield Button("Quit", id="install-quit")
 
     async def log(self, message: str):
-        self.log_text += f"\n{message}"
-        self.log_widget.update(self.log_text)
-        await asyncio.sleep(0.05)
+        """Append a line to the log and auto-scroll to show latest lines."""
+        self.log_lines.append(message)
+        # Only display the last `display_lines` lines to simulate scrolling
+        visible_lines = self.log_lines[-self.display_lines:]
+        self.log_widget.update("\n".join(visible_lines))
+        await asyncio.sleep(0.01)
 
-    async def run_install_script(self):
-        """Run the external shell installer script and stream its output."""
-        script_path = "/usr/share/antisos-installer/install.sh"
-        cmd = f"bash {script_path} {self.disk}"
-        await self.log(f"Currently Running: {cmd}")
+    async def run_script(self):
+        """Run the shell script and stream stdout/stderr line by line."""
+        try:
+            process = await asyncio.create_subprocess_shell(
+                f"bash {self.script_path}",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            assert process.stdout is not None
+            async for line in process.stdout:
+                await self.log(line.decode().rstrip())
+            await process.wait()
+            await self.log(f"\nInstaller finished with exit code {process.returncode}")
+        except Exception as e:
+            await self.log(f"[ERROR]: {e}")
 
-        process = await asyncio.create_subprocess_shell(
-            cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-        )
-        assert process.stdout is not None
-        async for line in process.stdout:
-            await self.log(line.decode().rstrip())
-
-        await process.wait()
-        if process.returncode != 0:
-            await self.log(f"[ERROR] Installer exited with code {process.returncode}")
-        else:
-            await self.log("Installation complete! You can reboot now.")
-
-    async def on_mount(self) -> None:
-        await self.run_install_script()
+    async def on_mount(self):
+        """Start the installer script automatically when the page is mounted."""
+        asyncio.create_task(self.run_script())
