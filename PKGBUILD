@@ -9,7 +9,7 @@ license=('GPL')
 depends=('bash' 'gum' 'git')  # common dependencies only
 optdepends=('iwd: Choose for iwctl networking'
             'networkmanager: Choose for nmtui networking')
-source=("installer.sh")
+source=git+https://github.com/franiekidos/antisos-installer
 sha256sums=('SKIP')  # replace with actual
 
 package() {
