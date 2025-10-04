@@ -9,9 +9,25 @@ license=('GPL')
 depends=('bash' 'gum' 'git')  # common dependencies only
 optdepends=('iwd: Choose for iwctl networking'
             'networkmanager: Choose for nmtui networking')
-source=git+https://github.com/franiekidos/antisos-installer
+source=("git+https://github.com/franiekidos/antisos-installer.git")
 sha256sums=('SKIP')  # replace with actual
 
+# Optional: makepkg knows how to clone git repos automatically
+# $srcdir/antisos-installer will exist after cloning
+
 package() {
-    install -Dm755 "$srcdir/installer.sh" "$pkgdir/usr/bin/archminimal-installer"
+    cd "$srcdir/antisos-installer" || return
+
+    # Make sure the installer file exists
+    if [[ ! -f "installer" ]]; then
+        echo "Error: 'installer' not found in the repository root"
+        return 1
+    fi
+
+    # Install main installer script
+    install -Dm755 "installer" "${pkgdir}/usr/bin/antisos-installer"
+
+    # Optional: install any completion or configs if needed
+    # mkdir -p "${pkgdir}/usr/share/antisos-installer"
+    # cp -r configs "${pkgdir}/usr/share/antisos-installer/"
 }
