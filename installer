@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+set -e
+
+#---------------------------------------------
+# Installer: Minimal Arch-Based Installer
+#---------------------------------------------
+
+# Function to check network
+check_network() {
+    if ping -c 1 archlinux.org &>/dev/null; then
+        echo "✅ Network connected. Skipping setup."
+        return 0
+    fi
+
+    echo "🌐 Select a network:"
+    if command -v nmcli &>/dev/null; then
+        # List Wi-Fi networks using NetworkManager
+        networks=($(nmcli -t -f SSID dev wifi list | awk NF))
+        chosen=$(gum choose "${networks[@]}")
+        password=$(gum input --password "Password for $chosen:")
+        nmcli dev wifi connect "$chosen" password "$password"
+    elif command -v iwctl &>/dev/null; then
+        echo "⚡ Using iwd..."
+        device=$(iwctl device list | awk 'NR==2 {print $1}')
+        networks=($(iwctl station "$device" get-networks | awk 'NR>2 {print $1}'))
+        chosen=$(gum choose "${networks[@]}")
+        password=$(gum input --password "Password for $chosen:")
+        iwctl station "$device" connect "$chosen"
+    else
+        echo "No Wi-Fi utility found. Please connect manually."
+        exit 1
+    fi
+}
+
+#---------------------------------------------
+# Disk selection and partitioning
+#---------------------------------------------
+select_disk() {
+    disks=($(lsblk -dno NAME,SIZE | awk '{print "/dev/" $1 " (" $2 ")"}'))
+    disk=$(gum choose "${disks[@]}")
+    disk=${disk%% *} # Strip size info
+
+    confirm=$(gum confirm "WARNING: This will erase $disk. Continue?")
+    if [ "$confirm" != "true" ]; then
+        echo "Aborted."
+        exit 1
+    fi
+
+    # Advanced partitioning
+    gum confirm "Run cfdisk for advanced partitioning?" && cfdisk "$disk"
+}
+
+#---------------------------------------------
+# Format & mount partitions
+#---------------------------------------------
+format_mount() {
+    gum confirm "Format root partition and mount?" || exit 1
+    read -p "Root partition (e.g., /dev/sda1): " ROOT_PART
+    read -p "EFI partition (UEFI only, e.g., /dev/sda2): " EFI_PART || true
+
+    mkfs.ext4 "$ROOT_PART"
+    mount "$ROOT_PART" /mnt
+
+    if [ -n "$EFI_PART" ]; then
+        mkfs.fat -F32 "$EFI_PART"
+        mkdir -p /mnt/boot
+        mount "$EFI_PART" /mnt/boot
+    fi
+}
+
+#---------------------------------------------
+# Install base system
+#---------------------------------------------
+install_base() {
+    pacstrap /mnt base linux linux-firmware git networkmanager
+    # Detect CPU type and install microcode
+    if lscpu | grep -qi "intel"; then
+        pacstrap /mnt intel-ucode
+    elif lscpu | grep -qi "amd"; then
+        pacstrap /mnt amd-ucode
+    fi
+}
+
+#---------------------------------------------
+# Configure system defaults
+#---------------------------------------------
+configure_defaults() {
+    genfstab -U /mnt >> /mnt/etc/fstab
+
+    arch-chroot /mnt /bin/bash <<'EOF'
+# Locale
+echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
+locale-gen
+echo "LANG=en_US.UTF-8" > /etc/locale.conf
+
+# Timezone
+ln -sf /usr/share/zoneinfo/UTC /etc/localtime
+hwclock --systohc
+
+# Hostname
+echo "archvm" > /etc/hostname
+
+# Hosts file
+cat <<HOSTS > /etc/hosts
+127.0.0.1   localhost
+::1         localhost
+127.0.1.1   archvm.localdomain archvm
+HOSTS
+
+# Enable NetworkManager
+systemctl enable NetworkManager
+
+# Root autologin
+mkdir -p /etc/systemd/system/getty@tty1.service.d
+cat <<SERVICE > /etc/systemd/system/getty@tty1.service.d/override.conf
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin root --noclear %I \$TERM
+SERVICE
+
+# Root bash prompt
+echo 'export PS1="\[\e[1;32m\]\u@\h \[\e[1;34m\]\w\$ \[\e[0m\]"' >> /root/.bashrc
+EOF
+}
+
+#---------------------------------------------
+# Main flow
+#---------------------------------------------
+clear
+echo "==> Arch-Based Installer"
+check_network
+select_disk
+format_mount
+install_base
+configure_defaults
+
+echo "✅ Installation complete! Reboot now."
